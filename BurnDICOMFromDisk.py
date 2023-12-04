@@ -1,6 +1,5 @@
 import pandas as pd
 import os
-import subprocess
 
 # Read the Excel file
 excel_file_path = '/cs/casmip/alina.ryabtsev/Tools/HCC cases.xlsx'
@@ -12,6 +11,12 @@ df = pd.read_excel(excel_file_path)
 # Iterate through each row in the DataFrame
 while True:
     scan_id = input("Enter scan ID: ")
+
+    # Validate input scan id
+    if not scan_id.isnumeric():
+        print("Scan ID is not valid. Try numeric ID")
+        continue
+
     scan_row = df.loc[df['Scan IDs'] == int(scan_id)]
 
     if scan_row.empty:
