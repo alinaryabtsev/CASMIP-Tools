@@ -1,5 +1,19 @@
 import pandas as pd
 import os
+from twilio.rest import Client
+
+# Twilio credentials
+account_sid = 'AC4f9e39ec2b739cf26adcb82d52965422'
+auth_token = '29d67b3e128a4c2b8365cbc07cc7d9e5'
+twilio_phone_number = '+14155238886'
+your_phone_number = '+972544987857'
+
+# Set up the Twilio client
+client = Client(account_sid, auth_token)
+
+# Your message content
+message_body = "Burning DICOM has finished!"
+
 
 # Read the Excel file
 excel_file_path = '/cs/casmip/alina.ryabtsev/Tools/HCC cases.xlsx'
@@ -52,4 +66,11 @@ while True:
     os.system(f"{dicom_convert_cmd} {output_folder} {input_dir}")
     print("\nDICOM converted successfully.\n")
     print('─' * 10)  # U+2501, Box Drawings Heavy Horizontal
+
+    # Send the WhatsApp message
+    message = client.messages.create(
+        from_='whatsapp:{}'.format(twilio_phone_number),
+        body=message_body,
+        to='whatsapp:{}'.format(your_phone_number)
+    )
 
