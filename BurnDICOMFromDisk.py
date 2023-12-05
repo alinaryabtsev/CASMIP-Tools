@@ -3,8 +3,10 @@ import os
 from twilio.rest import Client
 
 # Twilio credentials
-account_sid = 'AC4f9e39ec2b739cf26adcb82d52965422'
-auth_token = '29d67b3e128a4c2b8365cbc07cc7d9e5'
+with open("/cs/usr/alina.ryabtsev/twilio_credentials.txt", "r") as f:
+    text = f.read().split("\n")
+    account_sid = text[0].split(" ")[1]
+    auth_token = text[1].split(" ")[1]
 twilio_phone_number = '+14155238886'
 your_phone_number = '+972544987857'
 
