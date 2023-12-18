@@ -15,9 +15,7 @@ class SegmentationStats:
 
     def get_num_of_connected_components(self, get_labels=False):
         labeled_image, count = label(self.mask, return_num=True)
-        if get_labels:
-            return count, labeled_image
-        return count
+        return (count, labeled_image) if get_labels else count
 
     def get_num_of_connected_components_by_area(self, min_size=0, max_size=np.inf, get_labels=False):
         """
@@ -44,8 +42,8 @@ class SegmentationStats:
         """
         regions = regionprops(self.mask_labels)
         voxel_volume = np.prod(self.mask_nifti.header.get_zooms())
-        object_volumes = [obj.sum() * voxel_volume for obj in regions]
-        object_areas_in_size = [obj for vol, obj in zip(object_volumes, regions)
+        object_volumes = [obj.image.sum() * voxel_volume for obj in regions]
+        object_areas_in_size = [obj for vol, obj in zip(object_volumes, self.mask_labels.reshape(-1, 512, 512))
                                 if min_size <= SegmentationStats.approximate_diameter(vol) <= max_size]
         if get_labels:
             return len(object_areas_in_size), object_areas_in_size
