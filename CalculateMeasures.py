@@ -64,6 +64,7 @@ def calculate_measures(measures_type, predictions_list, gt_list, threshold_range
             if roi_list:
                 zipped_predictions = zip(predictions_list, gt_list, roi_list)
             else:
+                print("No ROI list provided")
                 zipped_predictions = zip(predictions_list, gt_list)
             results = p.starmap(partial(cm.calculate_stats, th=th),
                                 tqdm.tqdm(zipped_predictions,
@@ -221,8 +222,8 @@ class Utils:
         """
         get the largest connected component from a segmentation mask
         """
-        labels = measure.label(segmentation, connectivity)
-        assert (labels.max() != 0)  # assume at least 1 CC
+        labels = measure.label(segmentation, connectivity=connectivity)
+        assert (labels.max() != 0), "No connected component was found"  # assume at least 1 CC
         largest_cc = (labels == np.argmax(np.bincount(labels.flat)[1:]) + 1).astype(segmentation.dtype)
         return largest_cc
 
@@ -491,8 +492,11 @@ class SegmentationStatsTumors:
         # preprocessing on GT and ROI
         self.gt = binary_fill_holes(self.gt, BINARY_FILLER_MATRIX.astype(self.gt.dtype))
         self.gt = remove_small_objects(self.gt.astype(np.bool), min_size=20).astype(self.gt.dtype)
-
-        self.roi = Utils.get_largest_connected_component(self.roi, connectivity=1)
+        try:
+            self.roi = Utils.get_largest_connected_component(self.roi, connectivity=1)
+        except AssertionError:
+            print(f"Segmentation {self.file_name} has no liver mask")
+            raise
         self.roi = binary_fill_holes(self.roi, BINARY_FILLER_MATRIX.astype(self.roi.dtype))
 
         self.predictions[self.predictions < th] = 0
