@@ -45,19 +45,39 @@ TUMOR_MEASUREMENTS = ['Num of lesion',
                       'Precision',
                       'Recall',
                       'F1 Score']
-TUMORS_SIZES = [0, 5, 10]
+TUMORS_SIZES = (0, 5, 10)
 CATEGORIES_TO_CALCULATE = [f">{s}" for s in TUMORS_SIZES]
 BINARY_FILLER_MATRIX = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]]).reshape([3, 3, 1])  # matrix for semantic operations
 
 
-def calculate_measures(measures_type, predictions_list, gt_list, threshold_range, excel_path, roi_list=None):
-    cm = CalculateMeasures(measures_type)
+def calculate_measures(measures_type, predictions_list, gt_list, threshold_range, excel_path, roi_list=None,
+                       tumor_sizes=TUMORS_SIZES):
+    """
+    calculate measures (detection and segmentation) for a list of predictions and ground truth, creates an excel file
+    that summarizes all the information
+    :param measures_type: Are we measuring liver (or any big object) or tumors
+    :param predictions_list: the list with predictions file paths
+    :param gt_list: the list with ground truth file paths
+    :param threshold_range: the range of thresholds to calculate measures for (if there is only one threshold, the range is (1,2))
+    :param excel_path: the path to save the excel file
+    :param roi_list: a list with roi file paths
+    :param tumor_sizes: Texonomy of tumor sizes
+    """
+    cm = CalculateMeasures(measures_type, tumor_sizes)
 
     working_dir = os.path.dirname(excel_path)
-    excel_writer = pd.ExcelWriter(excel_path, engine='xlsxwriter')
+
+    # if there are multiple thresholds, create a directory according to the name of the excel (excel path) and put
+    # there all threshold analysis files
+    if len(threshold_range) > 1:
+        working_dir = os.path.join(working_dir, os.path.splitext(os.path.basename(excel_path))[0])
 
     os.makedirs(working_dir, exist_ok=True)
     for th in threshold_range:
+        if len(threshold_range) > 1:
+            excel_path = os.path.join(working_dir, f"Threshold_{th}.xlsx")
+        excel_writer = pd.ExcelWriter(excel_path, engine='xlsxwriter')
+
         print(f"Calculating measures for threshold {th}")
 
         with Pool(os.cpu_count() - 2) as p:
@@ -67,8 +87,7 @@ def calculate_measures(measures_type, predictions_list, gt_list, threshold_range
                 print("No ROI list provided")
                 zipped_predictions = zip(predictions_list, gt_list)
             results = p.starmap(partial(cm.calculate_stats, th=th),
-                                tqdm.tqdm(zipped_predictions,
-                                          total=len(predictions_list)))
+                                tqdm.tqdm(zipped_predictions, total=len(predictions_list)))
 
         results_df = dict([(cat, pd.DataFrame()) for cat in CATEGORIES_TO_CALCULATE])
 
@@ -80,27 +99,34 @@ def calculate_measures(measures_type, predictions_list, gt_list, threshold_range
             cm.write_to_excel(excel_writer, cat, results_df[cat])
         print(f"Writing measures for threshold {th} finished")
 
-    excel_writer.save()
+        excel_writer.save()
 
 
-def calculate_measures_dataframe(measures_type, predictions_list, gt_list, threshold_range, pix_dim=False):
-    cm = CalculateMeasures(measures_type)
+def calculate_measures_dataframe(measures_type, predictions_list, gt_list, threshold_range, roi_list=None,
+                                 pix_dim=False, tumor_sizes=TUMORS_SIZES):
+    cm = CalculateMeasures(measures_type, tumor_sizes)
     results_th = {t: [] for t in threshold_range}
 
     for th in threshold_range:
         print(f"Calculating measures for threshold {th}")
 
         with Pool(os.cpu_count() - 2) as p:
+            if roi_list:
+                zipped_predictions = zip(predictions_list, gt_list, roi_list)
+            else:
+                print("No ROI list provided")
+                zipped_predictions = zip(predictions_list, gt_list)
+
             if pix_dim:
                 print("Setting pixel dimensions to (1,1,1)")
                 results = p.starmap(partial(cm.calculate_stats, th=th, pix_dims=[1, 1, 1]),
-                                    tqdm.tqdm(zip(predictions_list, gt_list), total=len(gt_list)))
+                                    tqdm.tqdm(zipped_predictions, total=len(gt_list)))
             else:
                 results = p.starmap(partial(cm.calculate_stats, th=th),
-                                    tqdm.tqdm(zip(predictions_list, gt_list), total=len(gt_list)))
+                                    tqdm.tqdm(zipped_predictions, total=len(gt_list)))
 
         results_diameter_0, results_diameter_5, results_diameter_10 = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
+        print("All stats are calculated, rearranging data")
         for res in results:
             results_diameter_0 = results_diameter_0.append(res[0], ignore_index=True)
             results_diameter_5 = results_diameter_5.append(res[1], ignore_index=True)
@@ -116,14 +142,16 @@ def calculate_measures_dataframe(measures_type, predictions_list, gt_list, thres
 
 
 class CalculateMeasures:
-    def __init__(self, measures_type):
+    def __init__(self, measures_type, tumor_sizes=None):
         self.measures_type = measures_type  # liver or tumors
+        if self.measures_type == TUMORS:
+            self.tumor_sizes = tumor_sizes
 
     def calculate_stats(self, prediction, gt, roi=None, th=1, calculate_ASSD=True, calculate_HD=True, pix_dims=None):
         if type(gt) == np.ndarray:
             file_name = "scan"
         else:
-            file_name = os.path.join(os.path.dirname(gt), os.path.basename(gt))
+            file_name = os.path.dirname(gt) + os.path.basename(gt)
         if self.measures_type == LIVER:
             stats = SegmentationStatsLiver(file_name, gt, prediction, gt, th)
             return stats.calculate_stats_by_diameter(diameter=0)
@@ -132,13 +160,14 @@ class CalculateMeasures:
                 stats = SegmentationStatsTumors(roi, gt, prediction, file_name, th, pix_dims)
             else:
                 stats = SegmentationStatsTumors(None, gt, prediction, file_name, th, pix_dims)
-            return (stats.calculate_statistics_by_diameter(TUMORS_SIZES[0],
+                print(f"calculating stats {prediction}")
+            return (stats.calculate_statistics_by_diameter(self.tumor_sizes[0],
                                                            calculate_ASSD=calculate_ASSD,
                                                            calculate_HD=calculate_HD),
-                    stats.calculate_statistics_by_diameter(TUMORS_SIZES[1],
+                    stats.calculate_statistics_by_diameter(self.tumor_sizes[1],
                                                            calculate_ASSD=calculate_ASSD,
                                                            calculate_HD=calculate_HD),
-                    stats.calculate_statistics_by_diameter(TUMORS_SIZES[2],
+                    stats.calculate_statistics_by_diameter(self.tumor_sizes[2],
                                                            calculate_ASSD=calculate_ASSD,
                                                            calculate_HD=calculate_HD)
                     )
