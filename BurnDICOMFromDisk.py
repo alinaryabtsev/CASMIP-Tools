@@ -3,6 +3,7 @@ import os
 from twilio.rest import Client
 
 # Twilio credentials
+#5ZJV5X5QHKL55772RNKEDJD6
 with open("/cs/usr/alina.ryabtsev/twilio_credentials.txt", "r") as f:
     text = f.read().split("\n")
     account_sid = text[0].split(" ")[1]
@@ -22,11 +23,22 @@ excel_file_path = '/cs/casmip/alina.ryabtsev/Tools/HCC cases.xlsx'
 dest_folder_path = "/cs/casmip/alina.ryabtsev/PrimaryLesionsProject/Dataset/CT/HCC"
 input_dir = '/media/alina.ryabtsev/PATIENT_DATA'
 dicom_convert_cmd = '//cs/usr/alina.ryabtsev/dcm2niix/dcm2niix -z y -o'
-df = pd.read_excel(excel_file_path)
+
+year = 0
+while not year:
+    year = input("Please enter year (sheet name): ")
+    try:
+        df = pd.read_excel(excel_file_path, sheet_name=year)
+    except ValueError as e:
+        year = 0
+        print("Sheet name does not exit.")
 
 # Iterate through each row in the DataFrame
 while True:
-    scan_id = input("Enter scan ID: ")
+    print(f"Searcing in {year} scans")
+    scan_id = input("Enter scan ID, for quiting press q!: ")
+    if scan_id == "q!":
+        exit()
 
     # Validate input scan id
     if not scan_id.isnumeric():
